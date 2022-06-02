@@ -8,10 +8,23 @@ param (
     $Project,
     [Parameter(Mandatory = $true)]
     [string]
-    $Token
+    $Token,
+    [Parameter(Mandatory = $true)]
+    [ValidateScript({
+        if( -Not ($_ | Test-Path -PathType leaf) ){
+            throw "File '$_' does not exist."
+        }
+        return $true
+    })]
+    [System.IO.FileInfo]
+    $MappingFile
 )
 
 $ErrorActionPreference = "Stop"
+
+function ParseMappingFile(){    
+    return @(Get-Content -Path $MappingFile -Raw -Encoding utf8 | ConvertFrom-Json)
+}
 
 function FormatQuery([string] $projectName, [object] $mapping) {
     $queryFormat = "SELECT [System.Id] FROM workitemLinks WHERE ( [Source].[System.TeamProject] = '{0}' AND [Source].[System.WorkItemType] <> '' AND [Source].[System.State] <> '' ) AND ( {1} ) AND ( [Target].[System.TeamProject] = '{0}' AND [Target].[System.WorkItemType] <> '' ) ORDER BY [System.Id] MODE (MustContain)"
@@ -94,12 +107,7 @@ $authenicationHeader = @{Authorization = 'Basic ' + [Convert]::ToBase64String([T
 $wiqlApi = "$CollectionUrl/_apis/wit/wiql?api-version=6.0&`$top={0}&`$skip={1}"
 $workItemApi = "$CollectionUrl/_apis/wit/workitems/{0}?api-version=6.0"
 
-$linkReplacementMapping = @(
-    @{
-        "oldLinkType" = "System.LinkTypes.Hierarchy-Forward"
-        "newLinkType" = "System.LinkTypes.Related"
-    }
-)
+$linkReplacementMapping = ParseMappingFile
 
 $wiql = @{
     "query" = FormatQuery -projectName $Project -mapping $linkReplacementMapping
@@ -122,7 +130,7 @@ $processingTime = Measure-Command {
                 if ($relation.rel) {
                     $mapping = $linkReplacementMapping | Where-Object { $_.oldLinkType -eq $relation.rel }
             
-                    if ($mapping) {
+                    if ($mapping -and $mapping -isnot [array]) {
                         Write-Host "Replacing links on work item with id '$($relation.source.id)'..." -ForegroundColor White
                         if (ReplaceLinks -workItemRelation $relation -mapping $mapping) {
                             $summaryLog += @{
@@ -136,7 +144,11 @@ $processingTime = Measure-Command {
                         }
                     }
                     else {
-                        Write-Host "Skipped work item with id '$($relation.source.id)'. No mapping found for link type '$($relation.rel)'" -ForegroundColor Yellow
+                        if($mapping -is [array]){
+                            Write-Host "Skipped work item with id '$($relation.source.id)'. Reason: Multiple mappings for link type '$($relation.rel)' found." -ForegroundColor Yellow
+                        }else{
+                            Write-Host "Skipped work item with id '$($relation.source.id)'. Reason: No mapping found for link type '$($relation.rel)'." -ForegroundColor Yellow
+                        }
                     }
                 }
             }
