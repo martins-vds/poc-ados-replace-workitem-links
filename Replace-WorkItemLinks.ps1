@@ -58,23 +58,10 @@ function ReplaceLinks ($workItemRelation, [object] $mapping) {
         }
     ) 
     
-    if ($mapping.tags) {
-        $addLinkOperation += 
-        @{
-            "op"    = "add"
-            "path"  = "/fields/System.Tags"
-            "value" = $mapping.tags
-        }
-    }
-
     $null = Invoke-RestMethod -Uri "$($workItemApi -f $workItemRelation.source.id)" -Method Patch -Body $($addLinkOperation | ConvertTo-Json -Depth 3 -AsArray) -Headers $authenicationHeader -ContentType "application/json-patch+json"
 
     Write-Host "    Added link '$($mapping.newLinkType)'" -ForegroundColor White
     
-    if ($mapping.tags) {
-        Write-Host "    Added tags '$($mapping.tags)'" -ForegroundColor White
-    }
-
     $removeLinkOperation = @(@{
             "op"   = "remove"
             "path" = "/relations/{0}" -f $i
@@ -96,7 +83,6 @@ $linkReplacementMapping = @(
     @{
         "oldLinkType" = "System.LinkTypes.Hierarchy-Forward"
         "newLinkType" = "System.LinkTypes.Related"
-        "tags"        = "Tag1;Tag2"
     }
 )
 
@@ -129,7 +115,6 @@ $processingTime = Measure-Command {
                                 TargetId    = $relation.target.id
                                 OldLinkType = $mapping.oldLinkType
                                 NewLinkType = $mapping.newLinkType
-                                Tags        = $mapping.tags
                             }
                             $workItemsProcessed++
                         }
