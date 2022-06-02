@@ -58,18 +58,19 @@ function ReplaceLinks ($workItemRelation, [object] $mapping) {
         }
     ) 
     
+    Write-Host "    Adding link '$($mapping.newLinkType)' to work item with id '$($workItemRelation.target.id)'..." -ForegroundColor White
+
     $null = Invoke-RestMethod -Uri "$($workItemApi -f $workItemRelation.source.id)" -Method Patch -Body $($addLinkOperation | ConvertTo-Json -Depth 3 -AsArray) -Headers $authenicationHeader -ContentType "application/json-patch+json"
 
-    Write-Host "    Added link '$($mapping.newLinkType)'" -ForegroundColor White
-    
     $removeLinkOperation = @(@{
             "op"   = "remove"
             "path" = "/relations/{0}" -f $i
         }) | ConvertTo-Json -AsArray
     
-    $null = Invoke-RestMethod -Uri "$($workItemApi -f $workItemRelation.source.id)" -Method Patch -Body $removeLinkOperation -Headers $authenicationHeader -ContentType "application/json-patch+json"
+    
+    Write-Host "    Removing link type '$($mapping.oldLinkType)'..." -ForegroundColor White
 
-    Write-Host "    Removed link type '$($mapping.oldLinkType)'" -ForegroundColor White
+    $null = Invoke-RestMethod -Uri "$($workItemApi -f $workItemRelation.source.id)" -Method Patch -Body $removeLinkOperation -Headers $authenicationHeader -ContentType "application/json-patch+json"
 
     return $true
 }
