@@ -44,15 +44,6 @@ function ReplaceLinks ($workItemRelation, [object] $mapping) {
         return $false
     }
 
-    $removeLinkOperation = @(@{
-            "op"   = "remove"
-            "path" = "/relations/{0}" -f $i
-        }) | ConvertTo-Json -AsArray
-    
-    $null = Invoke-RestMethod -Uri "$($workItemApi -f $workItemRelation.source.id)" -Method Patch -Body $removeLinkOperation -Headers $authenicationHeader -ContentType "application/json-patch+json"
-
-    Write-Host "    Removed link type '$($mapping.oldLinkType)'" -ForegroundColor White
-
     $addLinkOperation = @(
         @{
             "op"    = "add"
@@ -83,6 +74,15 @@ function ReplaceLinks ($workItemRelation, [object] $mapping) {
     if ($mapping.tags) {
         Write-Host "    Added tags '$($mapping.tags)'" -ForegroundColor White
     }
+
+    $removeLinkOperation = @(@{
+            "op"   = "remove"
+            "path" = "/relations/{0}" -f $i
+        }) | ConvertTo-Json -AsArray
+    
+    $null = Invoke-RestMethod -Uri "$($workItemApi -f $workItemRelation.source.id)" -Method Patch -Body $removeLinkOperation -Headers $authenicationHeader -ContentType "application/json-patch+json"
+
+    Write-Host "    Removed link type '$($mapping.oldLinkType)'" -ForegroundColor White
 
     return $true
 }
