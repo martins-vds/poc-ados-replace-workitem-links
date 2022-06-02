@@ -70,10 +70,10 @@ function ReplaceLinks ($workItemRelation, [object] $mapping) {
             if($exceptionDetails.typeName -contains "WorkItemLinksLimitExceededException"){
                 Write-Host "    Failed to add link. Reason: work item with id '$($workItemRelation.target.id)' will exceed the 1000 link limit." -ForegroundColor Red
                 return $false
-            }else{
-                throw
             }
         }
+
+        throw
     }
 
     $removeLinkOperation = @(@{
