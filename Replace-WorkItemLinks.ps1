@@ -64,8 +64,8 @@ function ReplaceLinks ($workItemRelation, [object] $mapping) {
         $null = Invoke-RestMethod -Uri "$($workItemApi -f $workItemRelation.source.id)" -Method Patch -Body $($addLinkOperation | ConvertTo-Json -Depth 3 -AsArray) -Headers $authenicationHeader -ContentType "application/json-patch+json"
     }
     catch {
-        if ($_.Exception.ErrorDetails){
-            $exceptionDetails = $_.Exception.ErrorDetails | ConvertFrom-Json -AsHashtable
+        if ($_.ErrorDetails){
+            $exceptionDetails = $_.ErrorDetails.Message | ConvertFrom-Json -AsHashtable
             
             if($exceptionDetails.typeName -eq "Microsoft.TeamFoundation.WorkItemTracking.Server.WorkItemLinksLimitExceededException"){
                 Write-Host "    Failed to add link. Reason: work item with id '$($workItemRelation.target.id)' will exceed the 1000 link limit." -ForegroundColor Red
