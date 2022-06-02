@@ -90,7 +90,7 @@ $wiql = @{
     "query" = FormatQuery -projectName $Project -mapping $linkReplacementMapping
 } | ConvertTo-Json -Depth 1
 
-$summaryLogName = "replacement-$(Get-Date -UFormat "%Y-%m-%d_%H-%m-%S")"
+$summaryLogName = "replacement-$Project-$(Get-Date -UFormat "%Y-%m-%d_%H-%m-%S")"
 $summaryLogFile = "$summaryLogName.log"
 
 $workItemsProcessed = 0
@@ -111,6 +111,7 @@ $processingTime = Measure-Command {
                         Write-Host "Replacing links on work item with id '$($relation.source.id)'..." -ForegroundColor White
                         if (ReplaceLinks -workItemRelation $relation -mapping $mapping) {
                             $summaryLog += @{
+                                Project     = $Project
                                 SourceId    = $relation.source.Id
                                 TargetId    = $relation.target.id
                                 OldLinkType = $mapping.oldLinkType
