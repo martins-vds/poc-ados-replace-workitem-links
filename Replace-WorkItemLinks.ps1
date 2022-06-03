@@ -11,18 +11,18 @@ param (
     $Token,
     [Parameter(Mandatory = $true)]
     [ValidateScript({
-        if( -Not ($_ | Test-Path -PathType leaf) ){
-            throw "File '$_' does not exist."
-        }
-        return $true
-    })]
+            if ( -Not ($_ | Test-Path -PathType leaf) ) {
+                throw "File '$_' does not exist."
+            }
+            return $true
+        })]
     [System.IO.FileInfo]
     $MappingsFile
 )
 
 $ErrorActionPreference = "Stop"
 
-function ParseMappingsFile(){    
+function ParseMappingsFile() {    
     return @(Get-Content -Path $MappingsFile -Raw -Encoding utf8 | ConvertFrom-Json)
 }
 
@@ -42,50 +42,44 @@ function ReplaceLinks ($workItemRelation, [object] $mapping) {
     $found = $false
     $relationCount = $sourceWorkItem.relations.Length
 
-    while ($i -lt $relationCount -and $found -eq $false) {
+    for ($i = 0; $i -lt $relationCount; $i++) {
         if ($sourceWorkItem.relations[$i].rel -eq $mapping.oldLinkType) {
+            Write-Host "    Replacing old link to work item with id '$($workItemRelation.target.id)' with new link '$($mapping.newLinkType)'..." -ForegroundColor White
+            
             $found = $true
-        }
-        
-        if (!$found) {
-            $i++
+
+            $addLinkOperation = @(
+                @{
+                    "op"    = "add"
+                    "path"  = "/relations/-"
+                    "value" = @{
+                        "rel"        = $mapping.newLinkType
+                        "url"        = $workItemRelation.target.url
+                        "attributes" = @{
+                            "comment" = "Changing link type from '{0}' to '{1}'" -f $mapping.oldLinkType, $mapping.newLinkType
+                        }
+                    }
+                }
+            ) 
+
+            $null = Invoke-RestMethod -Uri "$($workItemApi -f $workItemRelation.source.id)" -Method Patch -Body $($addLinkOperation | ConvertTo-Json -Depth 3 -AsArray) -Headers $authenicationHeader -ContentType "application/json-patch+json"
+
+            $removeLinkOperation = @(@{
+                    "op"   = "remove"
+                    "path" = "/relations/{0}" -f $i
+                }) | ConvertTo-Json -AsArray
+    
+            $null = Invoke-RestMethod -Uri "$($workItemApi -f $workItemRelation.source.id)" -Method Patch -Body $removeLinkOperation -Headers $authenicationHeader -ContentType "application/json-patch+json"
         }
     }
 
-    if (!$found) {
+    if ($found) {
+        return $true   
+    }
+    else {
         Write-Host "    Link already replaced." -ForegroundColor Yellow
         return $false
     }
-
-    $addLinkOperation = @(
-        @{
-            "op"    = "add"
-            "path"  = "/relations/-"
-            "value" = @{
-                "rel"        = $mapping.newLinkType
-                "url"        = $workItemRelation.target.url
-                "attributes" = @{
-                    "comment" = "Changing link type from '{0}' to '{1}'" -f $mapping.oldLinkType, $mapping.newLinkType
-                }
-            }
-        }
-    ) 
-    
-    Write-Host "    Adding link '$($mapping.newLinkType)' to work item with id '$($workItemRelation.target.id)'..." -ForegroundColor White
-
-    $null = Invoke-RestMethod -Uri "$($workItemApi -f $workItemRelation.source.id)" -Method Patch -Body $($addLinkOperation | ConvertTo-Json -Depth 3 -AsArray) -Headers $authenicationHeader -ContentType "application/json-patch+json"
-
-    $removeLinkOperation = @(@{
-            "op"   = "remove"
-            "path" = "/relations/{0}" -f $i
-        }) | ConvertTo-Json -AsArray
-    
-    
-    Write-Host "    Removing link type '$($mapping.oldLinkType)'..." -ForegroundColor White
-
-    $null = Invoke-RestMethod -Uri "$($workItemApi -f $workItemRelation.source.id)" -Method Patch -Body $removeLinkOperation -Headers $authenicationHeader -ContentType "application/json-patch+json"
-
-    return $true
 }
 
 $authenicationHeader = @{Authorization = 'Basic ' + [Convert]::ToBase64String([Text.Encoding]::ASCII.GetBytes(":$($Token)")) }
@@ -131,23 +125,21 @@ $processingTime = Measure-Command {
                             }
                         }
                         catch {
-                            if ($_.ErrorDetails){
+                            if ($_.ErrorDetails.Message) {
                                 $exceptionDetails = $_.ErrorDetails.Message | ConvertFrom-Json
                                 
-                                if($exceptionDetails.typeName -contains "WorkItemLinksLimitExceededException"){
-                                    Write-Host "    Failed to add link. Reason: work item with id '$($workItemRelation.target.id)' will exceed the 1000 link limit." -ForegroundColor Red
-                                }else{
-                                    Write-Host "    Failed process work item. Reason: '$exceptionDetails'" -ForegroundColor Red
-                                }
-                            }else{
-                                Write-Host "    Failed process work item. Reason: '$($_.Exception.ToString())'" -ForegroundColor Red
+                                Write-Host "    Failed to replace links. Reason: '$($exceptionDetails.message)'" -ForegroundColor Red
+                            }
+                            else {
+                                Write-Host "    Failed to replace links. Reason: '$($_.Exception.ToString())'" -ForegroundColor Red
                             }
                         }
                     }
                     else {
-                        if($mapping -is [array]){
+                        if ($mapping -is [array]) {
                             Write-Host "Skipped work item with id '$($relation.source.id)'. Reason: Multiple mappings for link type '$($relation.rel)' found." -ForegroundColor Yellow
-                        }else{
+                        }
+                        else {
                             Write-Host "Skipped work item with id '$($relation.source.id)'. Reason: No mapping found for link type '$($relation.rel)'." -ForegroundColor Yellow
                         }
                     }
