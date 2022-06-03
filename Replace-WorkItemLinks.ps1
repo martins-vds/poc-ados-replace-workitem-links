@@ -156,7 +156,7 @@ $processingTime = Measure-Command {
     
         }
         else {
-            if ($skip -eq 0) {
+            if ($response.workItemRelations.Length -eq 0) {
                 Write-Host "No work items found." -ForegroundColor Yellow
             }    
         }
