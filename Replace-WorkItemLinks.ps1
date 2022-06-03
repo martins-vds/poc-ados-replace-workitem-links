@@ -17,13 +17,13 @@ param (
         return $true
     })]
     [System.IO.FileInfo]
-    $MappingFile
+    $MappingsFile
 )
 
 $ErrorActionPreference = "Stop"
 
-function ParseMappingFile(){    
-    return @(Get-Content -Path $MappingFile -Raw -Encoding utf8 | ConvertFrom-Json)
+function ParseMappingsFile(){    
+    return @(Get-Content -Path $MappingsFile -Raw -Encoding utf8 | ConvertFrom-Json)
 }
 
 function FormatQuery([string] $projectName, [object] $mapping) {
@@ -93,10 +93,10 @@ $authenicationHeader = @{Authorization = 'Basic ' + [Convert]::ToBase64String([T
 $wiqlApi = "$CollectionUrl/_apis/wit/wiql?api-version=6.0&`$top={0}&`$skip={1}"
 $workItemApi = "$CollectionUrl/_apis/wit/workitems/{0}?api-version=6.0"
 
-$linkReplacementMapping = ParseMappingFile
+$linkReplacementMappings = ParseMappingsFile
 
 $wiql = @{
-    "query" = FormatQuery -projectName $Project -mapping $linkReplacementMapping
+    "query" = FormatQuery -projectName $Project -mapping $linkReplacementMappings
 } | ConvertTo-Json -Depth 1
 
 $summaryLogName = "replacement-$Project-$(Get-Date -UFormat "%Y-%m-%d_%H-%m-%S")"
@@ -114,7 +114,7 @@ $processingTime = Measure-Command {
         if ($response.workItemRelations.Length -gt 0) {
             foreach ($relation in $response.workItemRelations) {
                 if ($relation.rel) {
-                    $mapping = $linkReplacementMapping | Where-Object { $_.oldLinkType -eq $relation.rel }
+                    $mapping = $linkReplacementMappings | Where-Object { $_.oldLinkType -eq $relation.rel }
             
                     if ($mapping -and $mapping -isnot [array]) {
                         Write-Host "Replacing links on work item with id '$($relation.source.id)'..." -ForegroundColor White
