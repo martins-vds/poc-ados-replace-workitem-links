@@ -73,21 +73,7 @@ function ReplaceLinks ($workItemRelation, [object] $mapping) {
     
     Write-Host "    Adding link '$($mapping.newLinkType)' to work item with id '$($workItemRelation.target.id)'..." -ForegroundColor White
 
-    try {
-        $null = Invoke-RestMethod -Uri "$($workItemApi -f $workItemRelation.source.id)" -Method Patch -Body $($addLinkOperation | ConvertTo-Json -Depth 3 -AsArray) -Headers $authenicationHeader -ContentType "application/json-patch+json"
-    }
-    catch {
-        if ($_.ErrorDetails){
-            $exceptionDetails = $_.ErrorDetails.Message | ConvertFrom-Json
-            
-            if($exceptionDetails.typeName -contains "WorkItemLinksLimitExceededException"){
-                Write-Host "    Failed to add link. Reason: work item with id '$($workItemRelation.target.id)' will exceed the 1000 link limit." -ForegroundColor Red
-                return $false
-            }
-        }
-
-        throw
-    }
+    $null = Invoke-RestMethod -Uri "$($workItemApi -f $workItemRelation.source.id)" -Method Patch -Body $($addLinkOperation | ConvertTo-Json -Depth 3 -AsArray) -Headers $authenicationHeader -ContentType "application/json-patch+json"
 
     $removeLinkOperation = @(@{
             "op"   = "remove"
@@ -132,15 +118,30 @@ $processingTime = Measure-Command {
             
                     if ($mapping -and $mapping -isnot [array]) {
                         Write-Host "Replacing links on work item with id '$($relation.source.id)'..." -ForegroundColor White
-                        if (ReplaceLinks -workItemRelation $relation -mapping $mapping) {
-                            $summaryLog += @{
-                                Project     = $Project
-                                SourceId    = $relation.source.Id
-                                TargetId    = $relation.target.id
-                                OldLinkType = $mapping.oldLinkType
-                                NewLinkType = $mapping.newLinkType
+                        try {
+                            if (ReplaceLinks -workItemRelation $relation -mapping $mapping) {
+                                $summaryLog += @{
+                                    Project     = $Project
+                                    SourceId    = $relation.source.Id
+                                    TargetId    = $relation.target.id
+                                    OldLinkType = $mapping.oldLinkType
+                                    NewLinkType = $mapping.newLinkType
+                                }
+                                $workItemsProcessed++
                             }
-                            $workItemsProcessed++
+                        }
+                        catch {
+                            if ($_.ErrorDetails){
+                                $exceptionDetails = $_.ErrorDetails.Message | ConvertFrom-Json
+                                
+                                if($exceptionDetails.typeName -contains "WorkItemLinksLimitExceededException"){
+                                    Write-Host "    Failed to add link. Reason: work item with id '$($workItemRelation.target.id)' will exceed the 1000 link limit." -ForegroundColor Red
+                                }else{
+                                    Write-Host "    Failed process work item. Reason: '$exceptionDetails'" -ForegroundColor Red
+                                }
+                            }else{
+                                Write-Host "    Failed process work item. Reason: '$($_.Exception.ToString())'" -ForegroundColor Red
+                            }
                         }
                     }
                     else {
