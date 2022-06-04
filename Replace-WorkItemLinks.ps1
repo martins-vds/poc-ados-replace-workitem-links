@@ -26,9 +26,9 @@ function ParseMappingsFile() {
     return @(Get-Content -Path $MappingsFile -Raw -Encoding utf8 | ConvertFrom-Json)
 }
 
-function FormatQuery([string] $projectName, [object] $mapping) {
+function FormatQuery([string] $projectName, [object] $mappings) {
     $queryFormat = "SELECT [System.Id] FROM workitemLinks WHERE ( [Source].[System.TeamProject] = '{0}' AND [Source].[System.WorkItemType] <> '' AND [Source].[System.State] <> '' ) AND ( {1} ) AND ( [Target].[System.TeamProject] = '{0}' AND [Target].[System.WorkItemType] <> '' ) ORDER BY [System.Id] MODE (MustContain)"
-    $queryFilter = $mapping | ForEach-Object {
+    $queryFilter = $mappings | ForEach-Object {
         "[System.Links.LinkType] = '{0}'" -f $_.oldLinkType
     } | Join-String -Separator " OR "
 
@@ -73,24 +73,22 @@ function ReplaceLinks ($workItemRelation, [object] $mapping) {
         }
     }
 
-    if ($found) {
-        return $true   
-    }
-    else {
+    if (!$found){
         Write-Host "    Link already replaced." -ForegroundColor Yellow
-        return $false
     }
+
+    return $found
 }
 
 $authenicationHeader = @{Authorization = 'Basic ' + [Convert]::ToBase64String([Text.Encoding]::ASCII.GetBytes(":$($Token)")) }
 
-$wiqlApi = "$CollectionUrl/_apis/wit/wiql?api-version=6.0&`$top={0}&`$skip={1}"
+$wiqlApi = "$CollectionUrl/_apis/wit/wiql?api-version=6.0&`$top={0}"
 $workItemApi = "$CollectionUrl/_apis/wit/workitems/{0}?api-version=6.0"
 
 $linkReplacementMappings = ParseMappingsFile
 
 $wiql = @{
-    "query" = FormatQuery -projectName $Project -mapping $linkReplacementMappings
+    "query" = FormatQuery -projectName $Project -mappings $linkReplacementMappings
 } | ConvertTo-Json -Depth 1
 
 $summaryLogName = "replacement-$Project-$(Get-Date -UFormat "%Y-%m-%d_%H-%m-%S")"
@@ -99,11 +97,10 @@ $summaryLogFile = "$summaryLogName.log"
 $workItemsProcessed = 0
 $processingTime = Measure-Command {
     $top = 100
-    $skip = 0
     do {
         $summaryLog = @()
 
-        $response = Invoke-RestMethod -Uri $($wiqlApi -f $top, $skip) -Method Post -Headers $authenicationHeader -Body $wiql -ContentType "application/json"
+        $response = Invoke-RestMethod -Uri $($wiqlApi -f $top) -Method Post -Headers $authenicationHeader -Body $wiql -ContentType "application/json"
     
         if ($response.workItemRelations.Length -gt 0) {
             foreach ($relation in $response.workItemRelations) {
@@ -160,7 +157,6 @@ $processingTime = Measure-Command {
             $summaryLog | Export-Csv -Path $summaryLogFile -UseQuotes AsNeeded -Force
         }
 
-        $skip += $top
     } until (
         $response.workItemRelations.Length -le 0
     )
